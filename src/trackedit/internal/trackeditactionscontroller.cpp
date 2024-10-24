@@ -341,7 +341,26 @@ void TrackeditActionsController::paste()
     if (!tracks.empty() && selectedStartTime >= 0) {
         auto ret = trackeditInteraction()->pasteFromClipboard(selectedStartTime, selectedTrackId);
         if (!ret) {
-            interactive()->error(muse::trc("trackedit", "Paste error"), ret.text());
+            if (ret.code() == static_cast<int>(trackedit::Err::StereoClipIntoMonoTrack)) {
+                std::string title = muse::trc("trackedit", "Paste error");
+                std::string question = muse::trc("trackedit",
+                                                 "Stereo audio clips cannot be pasted onto mono tracks. "
+                                                 "Do you want to convert the stereo clip to mono?");
+
+                int convertBtn = int(muse::IInteractive::Button::Apply);
+                muse::IInteractive::Result result = interactive()->warning(title, question,
+                                                                           { interactive()->buttonData(muse::IInteractive::Button::Cancel),
+                                                                            muse::IInteractive::ButtonData(convertBtn, muse::trc("trackedit", "Convert to Mono"),
+                                                                                                           true) },
+                                                                           convertBtn);
+
+                if (result.standardButton() == muse::IInteractive::Button::Cancel) {
+                    return;
+                } else {
+                    // call paste again but convert stereo to mono if needed this time
+                    // auto ret = trackeditInteraction()->pasteFromClipboard(selectedStartTime, selectedTrackId, true);
+                }
+            }
         }
 
         pushProjectHistoryPasteState();

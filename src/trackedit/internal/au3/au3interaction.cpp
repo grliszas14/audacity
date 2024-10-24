@@ -91,7 +91,7 @@ std::vector<au::trackedit::TrackId> Au3Interaction::determineDestinationTracksId
     return tracksIds;
 }
 
-muse::Ret Au3Interaction::canPasteClips(const std::vector<TrackId>& dstTracksIds, secs_t begin) const
+muse::Ret Au3Interaction::canPasteClips(const std::vector<TrackId>& dstTracksIds, secs_t begin, bool autoConvert = false) const
 {
     for (size_t i = 0; i < dstTracksIds.size(); ++i) {
         WaveTrack* dstWaveTrack = DomAccessor::findWaveTrack(projectRef(), ::TrackId(dstTracksIds[i]));
@@ -109,7 +109,7 @@ muse::Ret Au3Interaction::canPasteClips(const std::vector<TrackId>& dstTracksIds
             return make_ret(trackedit::Err::NotEnoughSpaceForPaste);
         }
 
-        if (dstWaveTrack->NChannels() == 1 && clipboard()->trackData(i).track.get()->NChannels() == 2) {
+        if (dstWaveTrack->NChannels() == 1 && clipboard()->trackData(i).track.get()->NChannels() == 2 && !autoConvert) {
             return make_ret(trackedit::Err::StereoClipIntoMonoTrack);
         }
     }
@@ -309,7 +309,7 @@ void Au3Interaction::clearClipboard()
     clipboard()->clearTrackData();
 }
 
-muse::Ret Au3Interaction::pasteFromClipboard(secs_t begin, TrackId destinationTrackId)
+muse::Ret Au3Interaction::pasteFromClipboard(secs_t begin, TrackId destinationTrackId, bool autoConvert)
 {
     if (clipboard()->trackDataEmpty()) {
         return make_ret(trackedit::Err::TrackEmpty);
@@ -336,11 +336,12 @@ muse::Ret Au3Interaction::pasteFromClipboard(secs_t begin, TrackId destinationTr
     }
 
     // check if copied data fits into selected area
-    auto ret = canPasteClips(dstTracksIds, begin);
+    auto ret = canPasteClips(dstTracksIds, begin, autoConvert);
     if (!ret) {
         return ret;
     }
 
+    auto clipboardData = clipboard()->trackData();
     for (size_t i = 0; i < dstTracksIds.size(); ++i) {
         WaveTrack* dstWaveTrack = DomAccessor::findWaveTrack(projectRef(), ::TrackId(dstTracksIds[i]));
         IF_ASSERT_FAILED(dstWaveTrack) {
@@ -354,12 +355,16 @@ muse::Ret Au3Interaction::pasteFromClipboard(secs_t begin, TrackId destinationTr
             clipIdsBefore.insert(clip.key.clipId);
         }
 
-        if (clipboard()->trackData(i).track.get()->NChannels() == 1 && dstWaveTrack->NChannels() == 2) {
+        if (clipboardData.at(i).track.get()->NChannels() == 1 && dstWaveTrack->NChannels() == 2) {
             // When the source is mono, may paste its only channel
             // repeatedly into a stereo track
             const auto pastedTrack = std::static_pointer_cast<WaveTrack>(clipboard()->trackData(i).track);
             pastedTrack->MonoToStereo();
             dstWaveTrack->Paste(begin, *pastedTrack);
+        } else if (clipboardData.at(i).track.get()->NChannels() == 2 && dstWaveTrack->NChannels() == 1) { // if autoConvert == true
+            const auto pastedTrack = std::static_pointer_cast<WaveTrack>(clipboard()->trackData(i).track);
+            // convert pastedTrack (StereoToMono)
+            // dstWaveTrack->Paste(begin, *pastedTrack);
         } else {
             dstWaveTrack->Paste(begin, *clipboard()->trackData(i).track);
         }
