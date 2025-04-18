@@ -11,6 +11,12 @@ Rectangle {
 
     id: root
 
+    // property alias navigationPanel: tracksClipsView.navigation
+    property NavigationSection navigationSection: null
+    // property NavigationPanel navigationPanel: view.count > 0 ? view.itemAtIndex(0).navigationPanel : null // first panel
+    // property alias navigationSection: tracksClipsView.navigation.section
+    // property alias navigationOrderStart: tracksClipsView.navigation.order
+
     property bool clipHovered: false
     property bool clipHeaderHovered: false
     property var hoveredClipKey: null
@@ -369,6 +375,20 @@ Rectangle {
                 anchors.fill: parent
                 clip: true
 
+                navigation.section: root.navigationSection
+                navigation.order: 3
+
+                Component.onCompleted: {
+                    console.log("tracksClipsView navi section: " + navigation.section)
+                    console.log("tracksClipsView navi order: " + navigation.order)
+
+                    // console.log("tracksModel count:", tracksModel.count)
+
+                    // if (tracksModel && tracksModel.count > 0) {
+                    //     navigation.currentIndex = 0;
+                    // }
+                }
+
                 property bool moveActive: false
 
                 ScrollBar.horizontal: null
@@ -452,6 +472,10 @@ Rectangle {
                     ctrlPressed: root.ctrlPressed
                     selectionEditInProgress: selectionController.selectionEditInProgress
                     selectionInProgress: selectionController.selectionInProgress
+
+                    trackIdx: model.index
+                    navigationSection: root.navigationSection
+                    navigationPanel: tracksClipsView.navigation
 
                     onTrackItemMousePositionChanged: function(xWithinTrack, yWithinTrack, clipKey) {
                         let xGlobalPosition = xWithinTrack

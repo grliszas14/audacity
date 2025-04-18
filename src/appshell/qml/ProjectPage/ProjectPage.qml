@@ -254,6 +254,10 @@ DockPage {
                 navigationSection: tracksPanel.navigationSection
                 effectsSectionWidth: tracksPanel.effectsSectionWidth
 
+                Component.onCompleted: {
+                    console.log("tracksPanel navi section: " + navigationSection)
+                }
+
                 onOpenEffectsRequested: {
                     tracksPanel.showEffectsSection = true
                 }
@@ -305,6 +309,10 @@ DockPage {
 
     central: TracksClipsView {
         id: clipsView
+
+        navigationSection: tracksPanel.navigationSection
+        // navigationPanel.section: tracksPanel.navigationSection//root.playbackToolBarKeyNavSec
+        // navigationPanel.order: tracksPanel.navigationOrder + 1
     }
 
     statusBar: DockStatusBar {

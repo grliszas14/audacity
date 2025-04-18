@@ -82,6 +82,8 @@ Rectangle {
     signal clipItemMousePositionChanged(real x, real y)
     signal clipHeaderHoveredChanged(bool value)
 
+    property alias navigation: navCtrl
+
     radius: 4
     color: clipSelected ? "white" : clipColor
     border.color: "#000000"
@@ -100,6 +102,54 @@ Rectangle {
     property bool rightTrimContainsMouse: false
     property alias leftTrimPressedButtons: leftTrimStretchEdgeHover.pressedButtons
     property alias rightTrimPressedButtons: rightTrimStretchEdgeHover.pressedButtons
+
+    property bool accessibilityActivated: false
+
+    // for navigating between clips
+    NavigationControl {
+        id: navCtrl
+        name: root.name
+        enabled: root.enabled && root.visible
+
+        accessible.role: MUAccessible.Button
+        accessible.name: root.name
+
+        onActiveChanged: function(active) {
+            if (active) {
+                root.forceActiveFocus()
+
+                // show select button
+            } else if (accessibilityActivated) {
+                accessibilityActivated = false
+            }
+        }
+
+        onTriggered: {
+            accessibilityActivated = true
+            navCtrl.setActive(false)
+            clipNavigationPanel.setActive(true)
+        }
+    }
+
+    NavigationFocusBorder {
+        navigationCtrl: navCtrl
+    }
+
+    // panel for navigating within the clip's items
+    property NavigationPanel clipNavigationPanel: NavigationPanel {
+        name: "ClipNavigationPanel"
+        enabled: !navCtrl.active//root.enabled && root.visible
+        direction: NavigationPanel.Horizontal
+        order: 2
+        // section: navCtrl.se
+        section: navigation.panel.section
+        onActiveChanged: function(active) {
+            if (active) {
+                console.log("clip navigation panel activated")
+                // root.forceActiveFocus()
+            }
+        }
+    }
 
     onHeaderHoveredChanged: {
         root.clipHeaderHoveredChanged(headerHovered)
@@ -468,6 +518,11 @@ Rectangle {
                     textSidePadding: 0
                     visible: false
 
+                    navigation.name: "TitleEditComp"
+                    navigation.panel: root.clipNavigationPanel
+                    navigation.column: 1
+                    // navigation.row: 1
+
                     onTextChanged: function(text) {
                         titleEdit.newTitle = text
                     }
@@ -551,6 +606,11 @@ Rectangle {
 
                     menuModel: (root.multiClipsSelected || root.groupId != -1) ? multiClipContextMenuModel : singleClipContextMenuModel
 
+                    navigation.name: "ClipMenuBtn"
+                    navigation.panel: root.clipNavigationPanel
+                    navigation.column: 2
+                    // navigation.row: 2
+
                     onHandleMenuItem: function(itemId) {
                         Qt.callLater(menuModel.handleMenuItem, itemId)
                     }
@@ -609,6 +669,34 @@ Rectangle {
 
                 onRatioChanged: function (ratio) {
                     root.ratioChanged(ratio)
+                }
+            }
+
+            FlatButton {
+                id: accessibilitySelectBtn
+
+                anchors.horizontalCenter: parent.horizontalCenter
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: 10
+
+
+                navigation.name: "SelectBtn"
+                navigation.panel: root.clipNavigationPanel
+                navigation.column: 0
+                // navigation.row: 0
+
+                width: 55
+                height: 20
+                text: !root.clipSelected ? qsTrc("clips", "Select") : qsTrc("clips", "Deselect")
+                visible: clipNavigationPanel.active
+                normalColor: "#2b2a33"
+
+                onClicked: {
+                    if (!root.clipSelected) {
+                        root.requestSelected()
+                    } else {
+                        root.requestSelectionReset()
+                    }
                 }
             }
 

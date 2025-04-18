@@ -1,5 +1,6 @@
 import QtQuick
 
+import Muse.Ui
 import Muse.UiComponents
 
 import Audacity.ProjectScene
@@ -8,6 +9,45 @@ Item {
 
     id: root
 
+    property NavigationSection navigationSection: null
+    property NavigationPanel navigationPanel: null
+    // property NavigationPanel navigationPanel: repeator.count > 0 ? repeator.itemAtIndex(0).navigationPanel : null // first panel
+
+    // property NavigationPanel navigationPanel: NavigationPanel {
+    //     name: "elo"
+    //     enabled: root.enabled && root.visible
+    //     direction: NavigationPanel.Horizontal
+    //     onActiveChanged: function(active) {
+    //         if (active) {
+    //             root.forceActiveFocus()
+    //         }
+    //     }
+    // }
+
+    // NavigationControl {
+    //     id: navCtrl
+    //     name: root.name
+    //     enabled: root.enabled && root.visible
+
+    //     accessible.role: MUAccessible.Button
+    //     accessible.name: root.name
+
+    //     onActiveChanged: function(active) {
+    //         // if (active) {
+    //         //     root.forceActiveFocus()
+    //         // }
+    //     }
+
+    //     onTriggered: {
+    //         console.log("triggered")
+    //         // root.clicked()
+    //     }
+    // }
+
+    // property alias navigation: navPanel
+    // property alias accessible: navPanel.accessible
+
+    property int trackIdx: null
     property alias trackId: clipsModel.trackId
     property alias context: clipsModel.context
     property var canvas: null
@@ -185,16 +225,48 @@ Item {
         Repeater {
             id: repeator
 
+            // NavigationSection {
+            //     id: navSec
+            //     name: "ClipsView"
+            //     enabled: root.enabled && root.visible
+            //     order: 3
+            //     onActiveChanged: {
+            //         if (navSec.active) {
+            //             root.forceActiveFocus()
+            //         }
+            //     }
+            // }
+            // NavigationPanel {
+            //     id: optionsNavPanel
+            //     name: "ClipsView"
+            //     enabled: optionsColumn.enabled && optionsColumn.visible
+            //     direction: NavigationPanel.Vertical
+            //     section: root.navigationSection
+            //     order: 1
+            //     accessible.name: qsTrc("project/save", "Options")
+            // }
+
             model: clipsModel
 
             delegate: Loader {
+                id: dynamicLoader
                 property QtObject clipItem: model.item
+                property int index: model.index
+                // property var navigation: model.item.navigation
 
                 height: parent.height
                 width: Math.max(3, clipItem.width)
                 x: clipItem.x
 
                 asynchronous: true
+
+
+                // navPanel.section: root.navigationSection
+                // navPanel.order: 1
+
+                // Component.onCompleted: Qt.callLater(updateSource)
+                // onWidthChanged: Qt.callLater(updateSource)
+                // onXChanged: Qt.callLater(updateSource)
 
                 sourceComponent: {
                     if ((clipItem.x + clipItem.width) < (0 - clipsModel.cacheBufferPx)) {
@@ -263,6 +335,23 @@ Item {
                 collapsed: trackViewState.isTrackCollapsed
                 channelHeightRatio: root.channelHeightRatio
                 showChannelSplitter: isStereo
+
+                navigation.name: Boolean(clipItem) ? clipItem.title + clipItem.index : ""
+                navigation.panel: root.navigationPanel
+                navigation.column: index
+                navigation.row: root.trackIdx
+                navigation.accessible.name: Boolean(clipItem) ? clipItem.title : ""
+                // to nizej bedzie potrzebne do przesuwania ekranu jak bedziemy schodzic klipami nizej
+                // navigation.onActiveChanged: {
+                //     if (navigation.active) {
+                //         prv.currentItemNavigationName = navigation.name
+                //         view.positionViewAtIndex(index, ListView.Contain)
+                //     }
+                // }
+                Component.onCompleted: {
+                    console.log('item created with index: ' + index)
+                }
+
                 distanceToLeftNeighbor: {
                     let leftNeighbor = clipsModel.prev(clipItem.key)
                     if (!leftNeighbor) {
