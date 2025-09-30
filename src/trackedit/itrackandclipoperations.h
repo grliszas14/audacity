@@ -83,6 +83,7 @@ public:
     virtual bool moveTracks(const TrackIdList& trackIds, TrackMoveDirection direction) = 0;
     virtual bool moveTracksTo(const TrackIdList& trackIds, int pos) = 0;
     virtual ClipKeyList clipsOnTrack(const trackedit::TrackId trackId) = 0;
+    virtual muse::Ret makeRoomForDataOnTrack(const TrackId trackId, secs_t begin, secs_t end) = 0;
 
     virtual bool insertSilence(const TrackIdList& trackIds, secs_t begin, secs_t end, secs_t duration) = 0;
 

@@ -303,6 +303,13 @@ ClipKeyList TrackeditInteraction::clipsOnTrack(const TrackId trackId)
     return m_interaction->clipsOnTrack(trackId);
 }
 
+muse::Ret TrackeditInteraction::makeRoomForDataOnTrack(const TrackId trackId,
+                                                       secs_t begin,
+                                                       secs_t end)
+{
+    return m_interaction->makeRoomForDataOnTrack(trackId, begin, end);
+}
+
 bool TrackeditInteraction::undo()
 {
     return withPlaybackStop(&ITrackeditInteraction::undo);

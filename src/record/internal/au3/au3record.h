@@ -4,18 +4,19 @@
 
 #pragma once
 
-#include "modularity/ioc.h"
-
-#include "actions/iactionsdispatcher.h"
-#include "context/iglobalcontext.h"
 #include "global/async/asyncable.h"
 
+#include "modularity/ioc.h"
+#include "context/iglobalcontext.h"
 #include "au3audio/iaudioengine.h"
-#include "au3wrap/au3types.h"
+#include "actions/iactionsdispatcher.h"
 #include "trackedit/iprojecthistory.h"
+#include "trackedit/itrackeditinteraction.h"
 
-#include "../../irecord.h"
+#include "au3wrap/au3types.h"
+
 #include "irecordcontroller.h"
+#include "../../irecord.h"
 
 struct TransportSequences;
 struct AudioIOStartStreamOptions;
@@ -27,6 +28,7 @@ class Au3Record : public IRecord, public muse::async::Asyncable
     muse::Inject<au::audio::IAudioEngine> audioEngine;
     muse::Inject<muse::actions::IActionsDispatcher> dispatcher;
     muse::Inject<au::trackedit::IProjectHistory> projectHistory;
+    muse::Inject<trackedit::ITrackeditInteraction> trackeditInteraction;
 
 public:
     void init();
@@ -62,6 +64,7 @@ private:
     void commitRecording();
 
     void notifyAboutRecordClipsChanged();
+    void updateTrack();
 
     mutable muse::async::Channel<float> m_playbackVolumeChanged;
 

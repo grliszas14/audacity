@@ -88,6 +88,7 @@ public:
     bool moveTracks(const TrackIdList& trackIds, const TrackMoveDirection direction) override;
     bool moveTracksTo(const TrackIdList& trackIds, int to) override;
     ClipKeyList clipsOnTrack(const trackedit::TrackId trackId) override;
+    muse::Ret makeRoomForDataOnTrack(const TrackId trackId, secs_t begin, secs_t end) override;
 
     bool insertSilence(const TrackIdList& trackIds, secs_t begin, secs_t end, secs_t duration) override;
 
@@ -131,7 +132,6 @@ private:
     muse::Ret canPasteTrackData(const TrackIdList& tracksIds, const std::vector<Au3TrackDataPtr>& clipsToPaste) const;
     muse::Ret makeRoomForClip(const trackedit::ClipKey& clipKey);
     muse::Ret makeRoomForClipsOnTracks(const std::vector<TrackId>& tracksIds, const std::vector<Au3TrackDataPtr>& trackData, secs_t begin);
-    muse::Ret makeRoomForDataOnTrack(const TrackId trackId, secs_t begin, secs_t end);
     muse::Ret makeRoomForDataOnTracks(const std::vector<TrackId>& tracksIds, const std::vector<Au3TrackDataPtr>& trackData, secs_t begin,
                                       bool pasteIntoExistingClip);
     bool singleClipOnTrack(WaveTrack* waveTrack) const;

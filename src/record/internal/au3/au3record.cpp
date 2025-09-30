@@ -193,6 +193,7 @@ void Au3Record::init()
 
     audioEngine()->finished().onNotify(this, [this]() {
         notifyAboutRecordClipsChanged();
+        updateTrack();
 
         m_recordData.clear();
     });
@@ -239,31 +240,11 @@ muse::Ret Au3Record::start()
         // try to choose only from them; else if wave tracks exist, may record into any.)
         existingTracks = ChooseExistingRecordingTracks(project, true, rateOfSelected);
         if (!existingTracks.empty()) {
-            t0 = std::max(t0,
-                          Au3TrackList::Get(project).Selected<const Au3WaveTrack>()
-                          .max(&Au3Track::GetEndTime));
             options.rate = rateOfSelected;
         } else {
             if (anySelected && rateOfSelected != options.rate) {
                 return make_ret(Err::TooFewCompatibleTracksSelected);
             }
-
-            existingTracks = ChooseExistingRecordingTracks(project, false, options.rate);
-            if (!existingTracks.empty()) {
-                const auto endTime = accumulate(
-                    existingTracks.begin(), existingTracks.end(),
-                    std::numeric_limits<double>::lowest(),
-                    [](double acc, auto& pTrack) {
-                    return std::max(acc, pTrack->GetEndTime());
-                }
-                    );
-
-                //If there is a suitable track, then adjust t0 so
-                //that recording not starts before the end of that track
-                t0 = std::max(t0, endTime);
-            }
-            // If suitable tracks still not found, will record into NEW ones,
-            // starting with t0
         }
 
         // Whether we decided on NEW tracks or not:
@@ -457,22 +438,9 @@ Ret Au3Record::doRecord(Au3Project& project,
             // when append recording.
             //const auto pending = static_cast<WaveTrack*>(newTrack);
             const auto lastClip = wt->GetRightmostClip();
-            // RoundedT0 to have a new clip created when punch-and-roll
-            // recording with the cursor in the second half of the space
-            // between two samples
-            // (https://github.com/audacity/audacity/issues/5113#issuecomment-1705154108)
-            const auto recordingStart = std::round(t0 * wt->GetRate()) / wt->GetRate();
-            const auto recordingStartsBeforeTrackEnd = lastClip && recordingStart < lastClip->GetPlayEndTime();
-            // Recording doesn't start before the beginning of the last clip
-            // - or the check for creating a new clip or not should be more
-            // general than that ...
-            assert(!recordingStartsBeforeTrackEnd || lastClip->WithinPlayRegion(recordingStart));
 
             Au3WaveTrack::IntervalHolder newClip{};
-            if (!recordingStartsBeforeTrackEnd
-                || lastClip->HasPitchOrSpeed()) {
-                newClip = insertEmptyInterval(*wt, t0, true);
-            }
+            newClip = insertEmptyInterval(*wt, t0, true);
 
             // Source clip was marked as placeholder so that it would not be
             // skipped in clip copying.  Un-mark it and its copy now
@@ -659,5 +627,32 @@ void Au3Record::notifyAboutRecordClipsChanged()
         prj->notifyAboutClipChanged(DomConverter::clip(track, clip.get()));
 
         m_recordPosition.set(clip->GetPlayEndTime());
+    }
+}
+
+void Au3Record::updateTrack()
+{
+    trackedit::ITrackeditProjectPtr prj = globalContext()->currentTrackeditProject();
+
+    for (const trackedit::ClipKey& clipKey : m_recordData.clipsKeys) {
+        Au3WaveTrack* track = DomAccessor::findWaveTrack(projectRef(), Au3TrackId(clipKey.trackId));
+        IF_ASSERT_FAILED(track) {
+            return;
+        }
+
+        std::shared_ptr<Au3WaveClip> clip = DomAccessor::findWaveClip(track, Au3ClipId(clipKey.clipId));
+        IF_ASSERT_FAILED(clip) {
+            return;
+        }
+
+        if (clip->GetPlayEndTime() > clip->GetPlayStartTime()) {
+            //! NOTE: detach clip from the source track
+            track->RemoveInterval(clip);
+
+            trackeditInteraction()->makeRoomForDataOnTrack(track->GetId(), clip->GetPlayStartTime(), clip->GetPlayEndTime());
+            track->InsertInterval(clip, false);
+        }
+
+        prj->notifyAboutTrackChanged(DomConverter::track(track));
     }
 }

@@ -75,6 +75,7 @@ private:
     void moveTracks(const TrackIdList& trackIds, const TrackMoveDirection direction) override;
     void moveTracksTo(const TrackIdList& trackIds, int to) override;
     ClipKeyList clipsOnTrack(const trackedit::TrackId trackId) override;
+    muse::Ret makeRoomForDataOnTrack(const TrackId trackId, secs_t begin, secs_t end) override;
 
     bool undo() override;
     bool canUndo() override;

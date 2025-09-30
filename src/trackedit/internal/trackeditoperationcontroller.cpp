@@ -497,6 +497,13 @@ ClipKeyList TrackeditOperationController::clipsOnTrack(const TrackId trackId)
     return trackAndClipOperations()->clipsOnTrack(trackId);
 }
 
+muse::Ret TrackeditOperationController::makeRoomForDataOnTrack(const TrackId trackId,
+                                                               secs_t begin,
+                                                               secs_t end)
+{
+    return trackAndClipOperations()->makeRoomForDataOnTrack(trackId, begin, end);
+}
+
 bool TrackeditOperationController::undo()
 {
     return m_undoManager->undo();
