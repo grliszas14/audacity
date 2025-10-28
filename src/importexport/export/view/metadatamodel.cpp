@@ -39,6 +39,9 @@ QVariant MetadataModel::data(const QModelIndex& index, int role) const
         if (role == RoleValue) {
             return QString(m_meta.*(project::kStdMembers[row]));
         }
+        if (role == RoleType) {
+            return "TransparentString";
+        }
         return {};
     }
 
@@ -50,6 +53,9 @@ QVariant MetadataModel::data(const QModelIndex& index, int role) const
     }
     if (role == RoleValue) {
         return m_meta.additionalTags.value(key);
+    }
+    if (role == RoleType) {
+        return "TransparentString";
     }
     return {};
 }
@@ -67,7 +73,8 @@ QHash<int, QByteArray> MetadataModel::roleNames() const
 {
     static const QHash<int, QByteArray> roles {
         { RoleTag, "tag" },
-        { RoleValue, "value" }
+        { RoleValue, "value" },
+        { RoleType, "roleType" },
     };
 
     return roles;
@@ -95,6 +102,8 @@ void MetadataModel::load()
 
 void MetadataModel::apply()
 {
+    qDebug() << "setting m_meta";
+
     tagsAccessor()->setTags(m_meta);
     configuration()->applySettings();
 }
@@ -106,6 +115,7 @@ bool MetadataModel::isStandardTag(const int index)
     }
 
     // first 9 tags are always standard tags
+    // NOTE: this still works if you reorder tags in the UI
     if (index < int(kStdTags.size())) {
         return true;
     }

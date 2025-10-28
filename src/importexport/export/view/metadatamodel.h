@@ -36,7 +36,8 @@ public:
 
     enum Roles {
         RoleTag = Qt::UserRole + 1,
-        RoleValue
+        RoleValue,
+        RoleType
     };
 
     Q_INVOKABLE void load();

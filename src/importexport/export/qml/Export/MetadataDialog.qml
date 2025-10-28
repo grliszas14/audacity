@@ -24,7 +24,7 @@ StyledDialogView {
 
     property NavigationPanel navigation: NavigationPanel {
         name: root.title
-        enabled: root.enabled && root.visible
+        // enabled: root.visible
         direction: NavigationPanel.Horizontal
         section: root.navigationSection
     }
@@ -47,21 +47,57 @@ StyledDialogView {
             id: topButtonsBar
 
             metadataModel: metadataModel
-            tagView: metadataView.tagView
+            tagView: metadataView
 
             navigationPanel: root.navigation
             navigationOrder: root.navigationOrder
         }
 
-        SeparatorLine {}
+        // SeparatorLine {}
 
-        MetadataView {
+        // MetadataView {
+        //     id: metadataView
+
+        //     metadataModel: metadataModel
+        // }
+
+        // SeparatorLine {}
+        ValueList {
             id: metadataView
 
-            metadataModel: metadataModel
-        }
+            keyRoleName: "tag"
+            keyTitle: qsTrc("metadata", "tag")
+            valueRoleName: "value"
+            valueTitle: qsTrc("metadata", "value")
+            valueTypeRole: "roleType"
+            readOnly: false
 
-        SeparatorLine {}
+            width: root.contentWidth
+            height: 527
+
+            drawZebra: false
+            headerColor: ui.theme.backgroundSecondaryColor
+            firstColWidth: 140
+            isKeyEditable: true
+
+            // set navi
+
+            model: metadataModel
+
+            onHandleItem: function(index, item, column) {
+                // rename tag
+                // console.log("handling item: " + item)
+                // console.log("handling index: " + index)
+                if (column === 0) {
+                    // if (metadataModel.isStandardTag(index)) {
+                    //     return
+                    // }
+                    console.log('edit key, index: ' + index)
+                } else {
+                    console.log('edit value')
+                }
+            }
+        }
 
         ButtonBox {
             id: buttonBox
