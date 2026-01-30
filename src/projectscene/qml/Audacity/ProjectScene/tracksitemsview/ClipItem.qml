@@ -898,6 +898,17 @@ Rectangle {
             }
         }
 
+        EditablePolyline {
+            id: automation
+
+            anchors.fill: viewsColumn
+
+            lineColor: ui.theme.extra["stroke_automation_curve"]
+            lineWidth: 1.5
+            pointRadius: 3
+            // pointsN: model.pointsN  // later
+        }
+
         FlatButton {
             id: accessibilitySelectBtn
 
