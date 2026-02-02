@@ -45,6 +45,7 @@ private:
     void updateDisplayWhilePlaying();
     void pinnedPlayHead();
     void togglePlaybackOnRulerClickEnabled();
+    void toggleAutomation();
     void toggleTrackHalfWave(const muse::actions::ActionQuery& q);
 
     void changeFontForLabels();
