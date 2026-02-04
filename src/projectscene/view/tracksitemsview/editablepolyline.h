@@ -1,3 +1,6 @@
+/*
+* Audacity: A Digital Audio Editor
+*/
 #pragma once
 
 #include <QQuickPaintedItem>
@@ -21,29 +24,74 @@ class EditablePolyline : public QQuickPaintedItem
     Q_PROPERTY(qreal baselineN READ baselineN WRITE setBaselineN NOTIFY baselineNChanged)
     Q_PROPERTY(qreal pointRadius READ pointRadius WRITE setPointRadius NOTIFY pointRadiusChanged)
     Q_PROPERTY(qreal hitRadius READ hitRadius WRITE setHitRadius NOTIFY hitRadiusChanged)
-    Q_PROPERTY(QVector<QPointF> pointsN READ pointsN WRITE setPointsN NOTIFY pointsNChanged)
+
+    Q_PROPERTY(QVector<QPointF> points READ points WRITE setPoints NOTIFY pointsChanged)
+    Q_PROPERTY(QVector<QPointF> pointsN READ pointsN WRITE setPointsN NOTIFY pointsNChanged) // acts like an internal-cache
+
+    Q_PROPERTY(qreal defaultValue READ defaultValue WRITE setDefaultValue NOTIFY defaultValueChanged)
+
+    Q_PROPERTY(qreal xRangeFrom READ xRangeFrom WRITE setXRangeFrom NOTIFY xRangeFromChanged)
+    Q_PROPERTY(qreal xRangeTo READ xRangeTo WRITE setXRangeTo NOTIFY xRangeToChanged)
+
+    Q_PROPERTY(qreal yRangeFrom READ yRangeFrom WRITE setYRangeFrom NOTIFY yRangeFromChanged)
+    Q_PROPERTY(qreal yRangeTo READ yRangeTo WRITE setYRangeTo NOTIFY yRangeToChanged)
+
+    // TODO: dB or linear (separate setting for x and y axis)
+
+    Q_PROPERTY(bool yAxisInverse READ yAxisInverse WRITE setYAxisInverse NOTIFY yAxisInverseChanged)
+
+    Q_PROPERTY(qreal dragX READ dragX WRITE setDragX NOTIFY dragXChanged)
+    Q_PROPERTY(qreal dragY READ dragY WRITE setDragY NOTIFY dragYChanged)
 
 public:
     explicit EditablePolyline(QQuickItem* parent = nullptr);
 
-    QColor lineColor() const { return m_lineColor; }
+    QColor lineColor() const;
     void setLineColor(const QColor&);
 
-    qreal lineWidth() const { return m_lineWidth; }
+    qreal lineWidth() const;
     void setLineWidth(qreal);
 
-    qreal baselineN() const { return m_baselineN; }
+    qreal baselineN() const;
     void setBaselineN(qreal);
 
-    qreal pointRadius() const { return m_pointRadius; }
+    qreal pointRadius() const;
     void setPointRadius(qreal);
 
-    qreal hitRadius() const { return m_hitRadius; }
+    qreal hitRadius() const;
     void setHitRadius(qreal);
 
-    QVector<QPointF> pointsN() const { return m_pointsN; }
+    QVector<QPointF> points() const;
+    void setPoints(const QVector<QPointF>&);
+
+    QVector<QPointF> pointsN() const;
     void setPointsN(const QVector<QPointF>&);
 
+    qreal defaultValue() const;
+    void setDefaultValue(qreal v);
+
+    qreal xRangeFrom() const;
+    void setXRangeFrom(qreal);
+
+    qreal xRangeTo() const;
+    void setXRangeTo(qreal);
+
+    qreal yRangeFrom() const;
+    void setYRangeFrom(qreal);
+
+    qreal yRangeTo() const;
+    void setYRangeTo(qreal);
+
+    bool yAxisInverse() const;
+    void setYAxisInverse(bool);
+
+    qreal dragX() const;
+    void setDragX(qreal);
+
+    qreal dragY() const;
+    void setDragY(qreal);
+
+    void geometryChange(const QRectF& newG, const QRectF& oldG) override;
     void paint(QPainter* painter) override;
 
 signals:
@@ -52,7 +100,25 @@ signals:
     void baselineNChanged();
     void pointRadiusChanged();
     void hitRadiusChanged();
+
+    void polylineFlattenRequested(qreal y, bool completed);
+    void pointAdded(qreal x, qreal y, bool completed);
+    void pointMoved(int index, qreal x, qreal y, bool completed);
+    void pointRemoved(int index, bool completed);
+    void interactionFinished();
+
+    void xRangeFromChanged();
+    void xRangeToChanged();
+    void yRangeFromChanged();
+    void yRangeToChanged();
+    void yAxisInverseChanged();
+
+    void defaultValueChanged();
     void pointsNChanged();
+    void pointsChanged();
+
+    void dragXChanged();
+    void dragYChanged();
 
 protected:
     void hoverMoveEvent(QHoverEvent* e) override;
@@ -64,11 +130,8 @@ protected:
 private:
     QVector<QPointF> polylinePx() const;
     bool isNearLinePx(const QPointF& px) const;
-    int pointIndexAtPx(const QPointF& px) const;
-    bool isInteractiveAtPx(const QPointF& px) const;
-    int insertPointOnLineAtPx(const QPointF& px);
-    qreal calculateLineYN(qreal xN) const;
     GhostPoint ghostPointToPolylinePx(const QPointF& px) const;
+    int pointIndexAtPx(const QPointF& px) const;
 
     void updateCursor();
     void resetGestureState();
@@ -76,14 +139,44 @@ private:
     QPointF clamp01(const QPointF& p) const;
     qreal clamp01(qreal v) const;
 
+    void rebuildNormalizedFromDomain();
+    void rebuildVisiblePoints();
+    QVector<QPointF> normalizedFromDomain(const QVector<QPointF>& pts) const;
+    QVector<QPointF> domainFromNormalized(const QVector<QPointF>& ptsN) const;
+
+    QPointF domainFromNormalized(const QPointF& pN) const;
+    QPointF normalizedFromDomain(const QPointF& p) const;
+
+    bool hasValidXRange() const;
+    bool hasValidYRange() const;
+
 private:
     QColor m_lineColor;
     qreal m_lineWidth = 1.0;
-    qreal m_baselineN = 0.5;
+    qreal m_baselineN =0.5;
     qreal m_pointRadius = 3.0;
     qreal m_hitRadius = 8.0;
 
-    QVector<QPointF> m_pointsN;
+    QVector<QPointF> m_points;          // domain points as provided from model
+    QVector<QPointF> m_pointsN;         // normalized points [0..1]
+    QVector<QPointF> m_pointsNVisible;  // normalized points, cropped to frame boundaries
+
+    // mapping for m_pointsNVisible -> index in m_points
+    QVector<int> m_visibleToDomainIndex;
+
+    qreal m_defaultValue = 1.0;
+
+    qreal m_xFrom = 0.0;
+    qreal m_xTo   = 1.0;
+    qreal m_yFrom = 0.0;
+    qreal m_yTo   = 1.0;
+    bool m_yAxisInverse = true;
+
+    // gesture preview (for painting only)
+    bool m_hasPreview = false;
+    int m_previewDomainIndex = -1;
+    QPointF m_previewPointN;      // normalized preview positiodn (in current ranges)
+    qreal m_previewBaselineN = 0.5;
 
     bool m_hoveredOnLine = false;
     QPointF m_hoverPx;
@@ -98,6 +191,7 @@ private:
 
     bool m_draggingLine = false;
     bool m_movedSincePress = false;
-    int m_draggedPointIndex = -1;
-    QPointF m_pressSinglePointN;
+
+    qreal m_dragX = 0.0;
+    qreal m_dragY = 0.0;
 };

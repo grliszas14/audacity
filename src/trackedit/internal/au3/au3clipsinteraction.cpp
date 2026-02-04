@@ -9,11 +9,13 @@
 #include <QCoreApplication>
 
 #include "au3-track/Track.h"
+#include "au3-mixer/Envelope.h"
 #include "au3-stretching-sequence/TempoChange.h"
-#include "au3-wave-track/WaveClip.h"
-#include "au3-wave-track/WaveTrackUtilities.h"
-#include "au3-wave-track/WaveTrack.h"
+#include "au3-track/Track.h"
 #include "au3-wave-track/TimeStretching.h"
+#include "au3-wave-track/WaveClip.h"
+#include "au3-wave-track/WaveTrack.h"
+#include "au3-wave-track/WaveTrackUtilities.h"
 
 #include "global/types/ret.h"
 #include "global/types/number.h"
@@ -300,6 +302,292 @@ bool Au3ClipsInteraction::renderClipPitchAndSpeed(const ClipKey& clipKey)
     prj->notifyAboutTrackChanged(DomConverter::track(waveTrack));         //! todo: replace with onClipChanged
 
     return true;
+}
+
+std::optional<ClipEnvelopeInfo> Au3ClipsInteraction::clipEnvelopeInfo(const ClipKey& clipKey) const
+{
+    Au3WaveTrack* waveTrack = DomAccessor::findWaveTrack(projectRef(), Au3TrackId(clipKey.trackId));
+    IF_ASSERT_FAILED(waveTrack) {
+        return {};
+    }
+
+    std::shared_ptr<Au3WaveClip> clip = DomAccessor::findWaveClip(waveTrack, clipKey.itemId);
+    IF_ASSERT_FAILED(clip) {
+        return {};
+    }
+
+    auto& env = clip->GetEnvelope();
+
+    ClipEnvelopeInfo info;
+    info.minValue = env.GetMinValue();
+    info.maxValue = env.GetMaxValue();
+    info.defaultValue = env.GetDefaultValue();
+    info.exponential = env.GetExponential();
+    info.version = env.GetVersion();
+
+    return info;
+}
+
+ClipEnvelopePoints Au3ClipsInteraction::clipEnvelopePoints(const ClipKey& clipKey) const
+{
+    Au3WaveTrack* waveTrack = DomAccessor::findWaveTrack(projectRef(), Au3TrackId(clipKey.trackId));
+    IF_ASSERT_FAILED(waveTrack) {
+        return {};
+    }
+
+    std::shared_ptr<Au3WaveClip> clip = DomAccessor::findWaveClip(waveTrack, clipKey.itemId);
+    IF_ASSERT_FAILED(clip) {
+        return {};
+    }
+
+    auto& env = clip->GetEnvelope();
+
+    ClipEnvelopePoints pts;
+    const auto n = env.GetNumberOfPoints();
+    pts.reserve(n);
+
+    const double offset = env.GetOffset();
+    for (size_t i = 0; i < n; ++i) {
+        const auto& p = env[int(i)];
+        pts.push_back({ offset + p.GetT(), p.GetVal() });
+    }
+    return pts;
+}
+
+bool Au3ClipsInteraction::setClipEnvelopePoint(const ClipKey& clipKey, double tAbs, double value, bool completed)
+{
+    Au3WaveTrack* waveTrack = DomAccessor::findWaveTrack(projectRef(), Au3TrackId(clipKey.trackId));
+    IF_ASSERT_FAILED(waveTrack) {
+        return false;
+    }
+
+    std::shared_ptr<Au3WaveClip> clip = DomAccessor::findWaveClip(waveTrack, clipKey.itemId);
+    IF_ASSERT_FAILED(clip) {
+        return false;
+    }
+
+    auto& env = clip->GetEnvelope();
+
+    const double v = std::clamp(value, env.GetMinValue(), env.GetMaxValue());
+
+    // choose the AU3 method that matches your behavior:
+    // - InsertOrReplace(tAbs, v)
+    // - SetValueAtTime(tAbs, v)
+    env.InsertOrReplace(tAbs, v);
+
+    // “completed” can be used later for undo grouping; for now you can just emit it.
+    if (auto prj = globalContext()->currentTrackeditProject()) {
+        prj->notifyAboutClipChanged(DomConverter::clip(waveTrack, clip.get()));
+    }
+
+    m_clipEnvelopeChanged.send(clipKey, completed);
+    return true;
+}
+
+bool Au3ClipsInteraction::removeClipEnvelopePoint(const ClipKey& clipKey, int index, bool completed)
+{
+    Au3WaveTrack* waveTrack = DomAccessor::findWaveTrack(projectRef(), Au3TrackId(clipKey.trackId));
+    IF_ASSERT_FAILED(waveTrack) {
+        return false;
+    }
+
+    std::shared_ptr<Au3WaveClip> clip = DomAccessor::findWaveClip(waveTrack, clipKey.itemId);
+    IF_ASSERT_FAILED(clip) {
+        return false;
+    }
+
+    auto& env = clip->GetEnvelope();
+    if (index < 0 || index >= int(env.GetNumberOfPoints())) {
+        return false;
+    }
+
+    env.Delete(index);
+
+    if (auto prj = globalContext()->currentTrackeditProject()) {
+        prj->notifyAboutClipChanged(DomConverter::clip(waveTrack, clip.get()));
+    }
+
+    m_clipEnvelopeChanged.send(clipKey, completed);
+    return true;
+}
+
+bool Au3ClipsInteraction::flattenClipEnvelope(const ClipKey& clipKey, double value, bool completed)
+{
+    Au3WaveTrack* waveTrack = DomAccessor::findWaveTrack(projectRef(), Au3TrackId(clipKey.trackId));
+    IF_ASSERT_FAILED(waveTrack) {
+        return false;
+    }
+
+    std::shared_ptr<Au3WaveClip> clip = DomAccessor::findWaveClip(waveTrack, clipKey.itemId);
+    IF_ASSERT_FAILED(clip) {
+        return false;
+    }
+
+    auto& env = clip->GetEnvelope();
+    const double v = std::clamp(value, env.GetMinValue(), env.GetMaxValue());
+    env.Flatten(v);
+
+    if (auto prj = globalContext()->currentTrackeditProject()) {
+        prj->notifyAboutClipChanged(DomConverter::clip(waveTrack, clip.get()));
+    }
+
+    m_clipEnvelopeChanged.send(clipKey, completed);
+    return true;
+}
+
+bool Au3ClipsInteraction::setClipEnvelopePointAtIndex(
+    const ClipKey& key, int index, double tAbs, double value, bool completed)
+{
+    // 1) Validate
+    const auto points = clipEnvelopePoints(key);
+    if (index < 0 || index >= static_cast<int>(points.size())) {
+        return false;
+    }
+
+    // 2) If time didn'time change, just "set" at the same time (value update)
+    const double oldT = points.at(index).time;
+    if (muse::is_equal(oldT, tAbs)) {
+        return setClipEnvelopePoint(key, tAbs, value, completed);
+    }
+
+    // 3) Prevent duplicates at the destination time (optional but recommended)
+    // If a point already exists at ~tAbs, remove it first (remove higher indices first).
+    int dupIndex = -1;
+    for (int i = 0; i < static_cast<int>(points.size()); ++i) {
+        if (i == index) {
+            continue;
+        }
+        if (muse::is_equal(points.at(i).time, tAbs)) {
+            dupIndex = i;
+            break;
+        }
+    }
+
+    // Remove in descending order to keep indices valid
+    if (dupIndex != -1) {
+        const int first = std::max(index, dupIndex);
+        const int second = std::min(index, dupIndex);
+        if (!removeClipEnvelopePoint(key, first, completed)) {
+            return false;
+        }
+        if (!removeClipEnvelopePoint(key, second, completed)) {
+            return false;
+        }
+    } else {
+        if (!removeClipEnvelopePoint(key, index, completed)) {
+            return false;
+        }
+    }
+
+    // 4) Insert/replace at new time
+    return setClipEnvelopePoint(key, tAbs, value, completed);
+}
+
+bool Au3ClipsInteraction::beginClipEnvelopePointDrag(const ClipKey& clipKey, int pointIndex)
+{
+    Au3WaveTrack* waveTrack = DomAccessor::findWaveTrack(projectRef(), Au3TrackId(clipKey.trackId));
+    IF_ASSERT_FAILED(waveTrack) {
+        return false;
+    }
+
+    std::shared_ptr<Au3WaveClip> clip = DomAccessor::findWaveClip(waveTrack, clipKey.itemId);
+    IF_ASSERT_FAILED(clip) {
+        return false;
+    }
+
+    auto& env = clip->GetEnvelope();
+
+    const int n = static_cast<int>(env.GetNumberOfPoints());
+    if (pointIndex < 0 || pointIndex >= n) {
+        return false;
+    }
+
+    // If a drag is already active, end it (commit) to keep invariants sane.
+    if (m_envDrag && m_envDrag->active) {
+        endClipEnvelopePointDrag(m_envDrag->clip, /*commit*/ true);
+    }
+
+    // Store original values (useful for cancel later if you ever need it)
+    // You might have accessors for EnvPoint. If not, you can skip storing orig.
+    // TODO: adapt if you can read points: env->GetPointT(index), env->GetPointVal(index) etc.
+    EnvelopeDragSession s;
+    s.clip = clipKey;
+    s.index = pointIndex;
+    s.active = true;
+
+    // Select point for dragging
+    env.SetDragPoint(pointIndex);
+
+    m_envDrag = s;
+    return true;
+}
+
+bool Au3ClipsInteraction::updateClipEnvelopePointDrag(const ClipKey& clipKey, double tAbs, double value)
+{
+    if (!m_envDrag || !m_envDrag->active || !(m_envDrag->clip == clipKey)) {
+        return false;
+    }
+
+    Au3WaveTrack* waveTrack = DomAccessor::findWaveTrack(projectRef(), Au3TrackId(clipKey.trackId));
+    IF_ASSERT_FAILED(waveTrack) {
+        return false;
+    }
+
+    std::shared_ptr<Au3WaveClip> clip = DomAccessor::findWaveClip(waveTrack, clipKey.itemId);
+    IF_ASSERT_FAILED(clip) {
+        return false;
+    }
+
+    auto& env = clip->GetEnvelope();
+
+    // Move drag point (identity preserved)
+    // const double tRel = absToEnvelopeRelTime(clip, tAbs);
+    env.MoveDragPoint(tAbs, value);
+
+    // TODO: if you need real-time redraw, notify/dirty here (but DO NOT clear drag point)
+    if (auto prj = globalContext()->currentTrackeditProject()) {
+        prj->notifyAboutClipChanged(DomConverter::clip(waveTrack, clip.get()));
+    }
+
+    m_clipEnvelopeChanged.send(clipKey, false);
+    return true;
+}
+
+bool Au3ClipsInteraction::endClipEnvelopePointDrag(const ClipKey& clipKey, bool commit)
+{
+    if (!m_envDrag || !m_envDrag->active || !(m_envDrag->clip == clipKey)) {
+        return false;
+    }
+
+    Au3WaveTrack* waveTrack = DomAccessor::findWaveTrack(projectRef(), Au3TrackId(clipKey.trackId));
+    IF_ASSERT_FAILED(waveTrack) {
+        return false;
+    }
+
+    std::shared_ptr<Au3WaveClip> clip = DomAccessor::findWaveClip(waveTrack, clipKey.itemId);
+    IF_ASSERT_FAILED(clip) {
+        return false;
+    }
+
+    auto& env = clip->GetEnvelope();
+
+    if (commit) {
+        // Finalize drag
+        env.ClearDragPoint();
+        // TODO: push history state here if that’s how your backend commits edits
+    } else {
+        // Cancel path (optional): you’d need to restore orig values you stored
+        // env->MoveDragPoint(absToEnvelopeRelTime(clip, m_envDrag->origTAbs), m_envDrag->origValue);
+        env.ClearDragPoint();
+    }
+
+    m_envDrag.reset();
+    return true;
+}
+
+muse::async::Channel<ClipKey, bool> Au3ClipsInteraction::clipEnvelopeChanged() const
+{
+    return m_clipEnvelopeChanged;
 }
 
 ITrackDataPtr Au3ClipsInteraction::cutClip(const ClipKey& clipKey)
@@ -1313,6 +1601,7 @@ bool Au3ClipsInteraction::stretchClipsLeft(const ClipKeyList& clipKeys, secs_t d
 
         trackedit::ITrackeditProjectPtr prj = globalContext()->currentTrackeditProject();
         prj->notifyAboutClipChanged(DomConverter::clip(waveTrack, clip.get()));
+        m_clipEnvelopeChanged.send(selectedClip, completed);
     }
 
     return true;
@@ -1343,6 +1632,7 @@ bool Au3ClipsInteraction::stretchClipsRight(const ClipKeyList& clipKeys, secs_t 
 
         trackedit::ITrackeditProjectPtr prj = globalContext()->currentTrackeditProject();
         prj->notifyAboutClipChanged(DomConverter::clip(waveTrack, clip.get()));
+        m_clipEnvelopeChanged.send(selectedClip, completed);
     }
 
     return true;
