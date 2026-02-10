@@ -57,6 +57,7 @@ public:
     Q_INVOKABLE void addPoint(double tAbs, double value, bool completed);
     Q_INVOKABLE void removePoint(int index, bool completed);
     Q_INVOKABLE void flatten(double value, bool completed);
+    Q_INVOKABLE void cancelDrag();
 
     ClipKey clipKey() const;
     void setClipKey(const ClipKey& key);

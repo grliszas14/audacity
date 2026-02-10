@@ -95,7 +95,7 @@ static double evalEnvelopeY(const QVector<QPointF>& sortedAbs, double xAbs)
 }
 
 EditablePolyline::EditablePolyline(QQuickItem* parent)
-    : QQuickPaintedItem(parent)
+    : QQuickPaintedItem(parent), muse::Injectable(muse::iocCtxForQmlObject(this))
 {
     setAcceptHoverEvents(true);
     setAcceptedMouseButtons(Qt::LeftButton);
@@ -103,6 +103,14 @@ EditablePolyline::EditablePolyline(QQuickItem* parent)
     setAntialiasing(true);
     setRenderTarget(QQuickPaintedItem::FramebufferObject);
     setOpaquePainting(false);
+}
+
+void EditablePolyline::init()
+{
+    dispatcher()->reg(this, "action://cancel", [this](){
+        emit dragCancelled();
+        resetGestureState();
+    });
 }
 
 QColor EditablePolyline::lineColor() const

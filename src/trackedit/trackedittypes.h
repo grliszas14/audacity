@@ -136,7 +136,7 @@ struct EnvelopeDragSession
 {
     au::trackedit::ClipKey clip;
     int index = -1;
-    double origTAbs = 0.0;
+    double origTime = 0.0;
     double origValue = 0.0;
     bool active = false;
 };

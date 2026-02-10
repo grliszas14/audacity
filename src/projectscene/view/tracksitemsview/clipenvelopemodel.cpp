@@ -23,8 +23,6 @@ void ClipEnvelopeModel::init()
         }
     });
 
-    // reload on undo
-
     clipsInteraction()->clipEnvelopeChanged().onReceive(
         this,
         [this](const ClipKey& key, bool /*completed*/) {
@@ -258,4 +256,15 @@ void ClipEnvelopeModel::flatten(double value, bool completed)
     }
 
     reload();
+}
+
+void ClipEnvelopeModel::cancelDrag()
+{
+    if (!m_clipKey.isValid()) {
+        return;
+    }
+
+    clipsInteraction()->endClipEnvelopePointDrag(m_clipKey.key, /*commit*/ false);
+    m_dragActive = false;
+    m_dragIndex = -1;
 }

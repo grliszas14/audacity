@@ -3,10 +3,16 @@
 */
 #pragma once
 
-#include <QQuickPaintedItem>
 #include <QColor>
-#include <QVector>
 #include <QPointF>
+#include <QQuickPaintedItem>
+#include <QVector>
+
+#include "actions/actionable.h"
+#include "async/asyncable.h"
+
+#include "modularity/ioc.h"
+#include "actions/iactionsdispatcher.h"
 
 // NOTE: all of fooN() function are normalized, returning 0..1 values
 
@@ -15,7 +21,7 @@ struct GhostPoint {
     qreal dist = 1e18;
 };
 
-class EditablePolyline : public QQuickPaintedItem
+class EditablePolyline : public QQuickPaintedItem, public muse::async::Asyncable, public muse::actions::Actionable, public muse::Injectable
 {
     Q_OBJECT
 
@@ -43,8 +49,12 @@ class EditablePolyline : public QQuickPaintedItem
     Q_PROPERTY(qreal dragX READ dragX WRITE setDragX NOTIFY dragXChanged)
     Q_PROPERTY(qreal dragY READ dragY WRITE setDragY NOTIFY dragYChanged)
 
+    muse::Inject<muse::actions::IActionsDispatcher> dispatcher { this };
+
 public:
     explicit EditablePolyline(QQuickItem* parent = nullptr);
+
+    Q_INVOKABLE void init();
 
     QColor lineColor() const;
     void setLineColor(const QColor&);
@@ -105,6 +115,7 @@ signals:
     void pointAdded(qreal x, qreal y, bool completed);
     void pointMoved(int index, qreal x, qreal y, bool completed);
     void pointRemoved(int index, bool completed);
+    void dragCancelled();
     void interactionFinished();
 
     void xRangeFromChanged();

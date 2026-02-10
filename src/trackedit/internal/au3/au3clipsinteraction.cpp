@@ -438,20 +438,16 @@ bool Au3ClipsInteraction::flattenClipEnvelope(const ClipKey& clipKey, double val
 bool Au3ClipsInteraction::setClipEnvelopePointAtIndex(
     const ClipKey& key, int index, double tAbs, double value, bool completed)
 {
-    // 1) Validate
     const auto points = clipEnvelopePoints(key);
     if (index < 0 || index >= static_cast<int>(points.size())) {
         return false;
     }
 
-    // 2) If time didn'time change, just "set" at the same time (value update)
     const double oldT = points.at(index).time;
     if (muse::is_equal(oldT, tAbs)) {
         return setClipEnvelopePoint(key, tAbs, value, completed);
     }
 
-    // 3) Prevent duplicates at the destination time (optional but recommended)
-    // If a point already exists at ~tAbs, remove it first (remove higher indices first).
     int dupIndex = -1;
     for (int i = 0; i < static_cast<int>(points.size()); ++i) {
         if (i == index) {
@@ -463,7 +459,6 @@ bool Au3ClipsInteraction::setClipEnvelopePointAtIndex(
         }
     }
 
-    // Remove in descending order to keep indices valid
     if (dupIndex != -1) {
         const int first = std::max(index, dupIndex);
         const int second = std::min(index, dupIndex);
@@ -479,7 +474,6 @@ bool Au3ClipsInteraction::setClipEnvelopePointAtIndex(
         }
     }
 
-    // 4) Insert/replace at new time
     return setClipEnvelopePoint(key, tAbs, value, completed);
 }
 
@@ -501,21 +495,21 @@ bool Au3ClipsInteraction::beginClipEnvelopePointDrag(const ClipKey& clipKey, int
     if (pointIndex < 0 || pointIndex >= n) {
         return false;
     }
+    QVector<double> times(n);
+    QVector<double> values(n);
+    env.GetPoints(times.data(), values.data(), n);
 
-    // If a drag is already active, end it (commit) to keep invariants sane.
     if (m_envDrag && m_envDrag->active) {
-        endClipEnvelopePointDrag(m_envDrag->clip, /*commit*/ true);
+        endClipEnvelopePointDrag(m_envDrag->clip, true);
     }
 
-    // Store original values (useful for cancel later if you ever need it)
-    // You might have accessors for EnvPoint. If not, you can skip storing orig.
-    // TODO: adapt if you can read points: env->GetPointT(index), env->GetPointVal(index) etc.
     EnvelopeDragSession s;
     s.clip = clipKey;
     s.index = pointIndex;
     s.active = true;
+    s.origTime = times[pointIndex];
+    s.origValue = values[pointIndex];
 
-    // Select point for dragging
     env.SetDragPoint(pointIndex);
 
     m_envDrag = s;
@@ -539,12 +533,8 @@ bool Au3ClipsInteraction::updateClipEnvelopePointDrag(const ClipKey& clipKey, do
     }
 
     auto& env = clip->GetEnvelope();
-
-    // Move drag point (identity preserved)
-    // const double tRel = absToEnvelopeRelTime(clip, tAbs);
     env.MoveDragPoint(tAbs, value);
 
-    // TODO: if you need real-time redraw, notify/dirty here (but DO NOT clear drag point)
     if (auto prj = globalContext()->currentTrackeditProject()) {
         prj->notifyAboutClipChanged(DomConverter::clip(waveTrack, clip.get()));
     }
@@ -576,12 +566,18 @@ bool Au3ClipsInteraction::endClipEnvelopePointDrag(const ClipKey& clipKey, bool 
         projectHistory()->pushHistoryState(muse::trc("trackedit", "Dragged enveloped point"), muse::trc("trackedit",
                                                                                                         "Clip envelope edit"));
     } else {
-        // Cancel path (optional): you’d need to restore orig values you stored
-        // env->MoveDragPoint(absToEnvelopeRelTime(clip, m_envDrag->origTAbs), m_envDrag->origValue);
+        // cancel path: restore orig values
+        env.MoveDragPoint(m_envDrag->origTime + clip->GetPlayStartTime(), m_envDrag->origValue);
         env.ClearDragPoint();
     }
 
+    if (auto prj = globalContext()->currentTrackeditProject()) {
+        prj->notifyAboutClipChanged(DomConverter::clip(waveTrack, clip.get()));
+    }
+
+    m_clipEnvelopeChanged.send(clipKey, true);
     m_envDrag.reset();
+
     return true;
 }
 

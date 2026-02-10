@@ -927,6 +927,10 @@ Rectangle {
             yRangeTo: envelopeModel.maxValue
             yAxisInverse: false
 
+            Component.onCompleted: {
+                automation.init()
+            }
+
             onPointMoved: function(index, x, y, completed) {
                 // NOTE: EditablePolyline's returned x is within [xRangeFrom..xRangeTo] boundaries but
                 // clip's internal envelope expects time relative to clip startTime
@@ -949,9 +953,13 @@ Rectangle {
                 tooltip.gain = gainToDb(y)
             }
 
+            onDragCancelled: {
+                envelopeModel.cancelDrag()
+                tooltip.hide(true)
+            }
+
             onInteractionFinished: function() {
                 tooltip.hide(true)
-                // envelopeModel.endEdit() to implement
             }
 
             Item {
