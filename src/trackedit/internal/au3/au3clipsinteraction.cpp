@@ -370,15 +370,13 @@ bool Au3ClipsInteraction::setClipEnvelopePoint(const ClipKey& clipKey, double tA
 
     const double v = std::clamp(value, env.GetMinValue(), env.GetMaxValue());
 
-    // choose the AU3 method that matches your behavior:
-    // - InsertOrReplace(tAbs, v)
-    // - SetValueAtTime(tAbs, v)
     env.InsertOrReplace(tAbs, v);
 
-    // “completed” can be used later for undo grouping; for now you can just emit it.
     if (auto prj = globalContext()->currentTrackeditProject()) {
         prj->notifyAboutClipChanged(DomConverter::clip(waveTrack, clip.get()));
     }
+    projectHistory()->pushHistoryState(muse::trc("trackedit", "Added enveloped point"), muse::trc("trackedit",
+                                                                                                  "Clip envelope edit"));
 
     m_clipEnvelopeChanged.send(clipKey, completed);
     return true;
@@ -406,6 +404,8 @@ bool Au3ClipsInteraction::removeClipEnvelopePoint(const ClipKey& clipKey, int in
     if (auto prj = globalContext()->currentTrackeditProject()) {
         prj->notifyAboutClipChanged(DomConverter::clip(waveTrack, clip.get()));
     }
+    projectHistory()->pushHistoryState(muse::trc("trackedit", "Removed enveloped point"), muse::trc("trackedit",
+                                                                                                    "Clip envelope edit"));
 
     m_clipEnvelopeChanged.send(clipKey, completed);
     return true;
@@ -572,9 +572,9 @@ bool Au3ClipsInteraction::endClipEnvelopePointDrag(const ClipKey& clipKey, bool 
     auto& env = clip->GetEnvelope();
 
     if (commit) {
-        // Finalize drag
         env.ClearDragPoint();
-        // TODO: push history state here if that’s how your backend commits edits
+        projectHistory()->pushHistoryState(muse::trc("trackedit", "Dragged enveloped point"), muse::trc("trackedit",
+                                                                                                        "Clip envelope edit"));
     } else {
         // Cancel path (optional): you’d need to restore orig values you stored
         // env->MoveDragPoint(absToEnvelopeRelTime(clip, m_envDrag->origTAbs), m_envDrag->origValue);

@@ -23,6 +23,8 @@ void ClipEnvelopeModel::init()
         }
     });
 
+    // reload on undo
+
     clipsInteraction()->clipEnvelopeChanged().onReceive(
         this,
         [this](const ClipKey& key, bool /*completed*/) {
@@ -242,7 +244,6 @@ void ClipEnvelopeModel::removePoint(int index, bool completed)
         return;
     }
 
-    // Safest:
     reload();
 }
 
