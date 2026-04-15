@@ -82,6 +82,31 @@ void GraphicsDataCacheBase::Invalidate()
     mLookup.clear();
 }
 
+void GraphicsDataCacheBase::InvalidatePixelRange(
+    double pixelsPerSecond, int64_t firstPixel, int64_t lastPixel)
+{
+    if (firstPixel >= lastPixel || pixelsPerSecond <= 0.0) {
+        return;
+    }
+
+    const double samplesPerPixel = mScaledSampleRate / pixelsPerSecond;
+
+    for (auto& item : mLookup) {
+        if (item.Key.PixelsPerSecond != pixelsPerSecond) {
+            continue;
+        }
+
+        const auto elementFirstPixel = static_cast<int64_t>(
+            item.Key.FirstSample / samplesPerPixel + 0.5);
+        const auto elementLastPixel
+            =elementFirstPixel + static_cast<int64_t>(CacheElementWidth);
+
+        if (elementFirstPixel < lastPixel && elementLastPixel > firstPixel) {
+            item.Data->IsComplete = false;
+        }
+    }
+}
+
 double GraphicsDataCacheBase::GetScaledSampleRate() const noexcept
 {
     return mScaledSampleRate;

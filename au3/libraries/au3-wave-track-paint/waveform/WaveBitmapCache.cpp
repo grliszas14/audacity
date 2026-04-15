@@ -329,10 +329,33 @@ WaveBitmapCache& WaveBitmapCache::SetSelection(
         =empty ? int64_t(-1) : std::max(zoomInfo.TimeToPosition(t1), first + 1);
 
     if (mSelection.FirstPixel != first || mSelection.LastPixel != last) {
+        const auto oldFirst = mSelection.FirstPixel;
+        const auto oldLast = mSelection.LastPixel;
+        const bool oldValid = mSelection.IsValid();
+
         mSelection.FirstPixel = first;
         mSelection.LastPixel = last;
+        const bool newValid = mSelection.IsValid();
 
-        Invalidate();
+        const auto pps = zoomInfo.GetZoom();
+
+        if (!oldValid && newValid) {
+            // No selection -> selection: invalidate newly selected range
+            InvalidatePixelRange(pps, first, last);
+        } else if (oldValid && !newValid) {
+            // Selection -> no selection: invalidate previously selected range
+            InvalidatePixelRange(pps, oldFirst, oldLast);
+        } else if (oldValid && newValid) {
+            // Both valid: only invalidate around moved boundaries
+            if (oldFirst != first) {
+                InvalidatePixelRange(
+                    pps, std::min(oldFirst, first), std::max(oldFirst, first));
+            }
+            if (oldLast != last) {
+                InvalidatePixelRange(
+                    pps, std::min(oldLast, last), std::max(oldLast, last));
+            }
+        }
     }
 
     return *this;

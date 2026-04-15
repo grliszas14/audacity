@@ -109,6 +109,9 @@ protected:
     //! Perform a lookup for the given key. This method modifies mLookup and invalidates any previous result.
     const GraphicsDataCacheElementBase* PerformBaseLookup(GraphicsDataCacheKey key);
 
+    //! Mark cached elements overlapping [firstPixel, lastPixel) at the given zoom for re-initialization.
+    void InvalidatePixelRange(double pixelsPerSecond, int64_t firstPixel, int64_t lastPixel);
+
 private:
     // Called internally to create a list of items in the mNewLookupItems
     bool CreateNewItems();
