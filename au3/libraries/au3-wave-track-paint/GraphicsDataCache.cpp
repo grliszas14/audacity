@@ -356,10 +356,15 @@ void GraphicsDataCacheBase::DisposeNewItems()
 GraphicsDataCacheBase::Lookup::iterator
 GraphicsDataCacheBase::FindKey(GraphicsDataCacheKey key)
 {
-    return std::find_if(
-        mLookup.begin(), mLookup.end(),
-        [sampleRate = mScaledSampleRate, key](auto lhs)
-    { return IsSameKey(sampleRate, lhs.Key, key); });
+    auto it = std::lower_bound(
+        mLookup.begin(), mLookup.end(), key,
+        [sampleRate = mScaledSampleRate](const LookupElement& elem, const GraphicsDataCacheKey& k)
+    { return IsKeyLess(sampleRate, elem.Key, k); });
+
+    if (it != mLookup.end() && IsSameKey(mScaledSampleRate, it->Key, key)) {
+        return it;
+    }
+    return mLookup.end();
 }
 
 void GraphicsDataCacheBase::PerformCleanup()
