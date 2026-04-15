@@ -379,17 +379,39 @@ bool WaveBitmapCache::InitializeElement(
 
     auto rowData = element.Allocate(columnsCount, height);
 
-    for (int row = 0; row < height; ++row) {
-        auto colorFunction = mLookupHelper->ColorFunctions.data();
+    // Fill entire buffer with default (blank) color
+    {
+        auto ptr = rowData;
+        const auto totalPixels = static_cast<size_t>(height) * columnsCount;
+        for (size_t i = 0; i < totalPixels; ++i) {
+            *ptr++ = defaultColor.r;
+            *ptr++ = defaultColor.g;
+            *ptr++ = defaultColor.b;
+        }
+    }
 
-        for (size_t pixel = 0; pixel < columnsCount; ++pixel) {
-            const auto color = colorFunction->GetColor(row, defaultColor);
+    // Paint bands directly into the buffer, column by column.
+    // Later bands overwrite earlier ones, matching the priority order
+    // of ColorFunction::GetColor() without per-pixel band scanning.
+    const auto stride = columnsCount * 3;
+    const auto* colorFunctions = mLookupHelper->ColorFunctions.data();
 
-            *rowData++ = color.r;
-            *rowData++ = color.g;
-            *rowData++ = color.b;
+    for (size_t col = 0; col < columnsCount; ++col) {
+        const auto& func = colorFunctions[col];
+        const auto colByteOffset = col * 3;
 
-            ++colorFunction;
+        for (size_t b = 0; b < func.bandsCount; ++b) {
+            const auto& band = func.bands[b];
+            const auto from = std::max(0, band.from);
+            const auto to = std::min(height, band.to);
+
+            auto pixel = rowData + static_cast<size_t>(from) * stride + colByteOffset;
+            for (auto row = from; row < to; ++row) {
+                pixel[0] = band.color.r;
+                pixel[1] = band.color.g;
+                pixel[2] = band.color.b;
+                pixel += stride;
+            }
         }
     }
 
