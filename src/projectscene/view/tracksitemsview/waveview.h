@@ -139,6 +139,8 @@ private:
     double m_dbRange = -60.0;
     std::pair<float, float> m_displayBounds = { -1.0f, 1.0f };
 
+    bool m_updatePending = false;
+
     std::optional<int> m_currentChannel;
     std::optional<QPoint> m_lastClickedPoint;
 };

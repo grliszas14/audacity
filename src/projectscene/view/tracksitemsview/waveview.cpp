@@ -182,6 +182,8 @@ void WaveView::applyClassicStyle(IWavePainter::Params& params, bool selected) co
 
 void WaveView::paint(QPainter* painter)
 {
+    m_updatePending = false;
+
     IWavePainter::Params params = getWavePainterParams();
     IWavePainter::PlotType pType = wavepainterutils::getPlotType(globalContext()->currentProject(), m_clipKey.key, params.zoom);
 
@@ -229,6 +231,10 @@ void WaveView::setTimelineContext(TimelineContext* newContext)
 
 void WaveView::updateView()
 {
+    if (m_updatePending) {
+        return;
+    }
+    m_updatePending = true;
     update();
 }
 
