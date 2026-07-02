@@ -189,7 +189,13 @@ std::vector<WaveColumnVertex> WaveformPainter::GetColumnData(
     }
 
     constexpr size_t tileWidth = GraphicsDataCacheBase::CacheElementWidth;
-    float tileStartX = static_cast<float>(metrics.left);
+
+    // PerformLookup snaps fromTime to a whole column; carry the discarded
+    // sub-pixel fraction into the vertex positions so the waveform does not
+    // wobble against the smoothly-moving clip edge while trimming/scrolling.
+    const double exactStartPixel = metrics.fromTime * metrics.zoom;
+    const int64_t snappedStartPixel = zoomInfo.TimeToPosition(metrics.fromTime);
+    float tileStartX = static_cast<float>(metrics.left + (snappedStartPixel - exactStartPixel));
 
     for (auto it = range.begin(); it != range.end(); ++it) {
         const auto& element = *it;
@@ -201,7 +207,11 @@ std::vector<WaveColumnVertex> WaveformPainter::GetColumnData(
         const size_t nominalWidth = tileWidth - leftOffset - rightOffset;
         const size_t endCol = std::min<size_t>(element.AvailableColumns, tileWidth - rightOffset);
 
-        if (dataComplete && !element.IsComplete) {
+        // The final element of a clip is never IsComplete (it nominally spans
+        // past the clip's end); only report incompleteness when columns are
+        // missing within the requested window.
+        if (dataComplete && !element.IsComplete
+            && element.AvailableColumns < tileWidth - rightOffset) {
             *dataComplete = false;
         }
 

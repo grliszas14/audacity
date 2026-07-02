@@ -565,7 +565,14 @@ Rectangle {
     Rectangle {
         id: inner
 
-        anchors.fill: parent
+        // The layer below renders this subtree into a texture, and textures have
+        // integer sizes: with a fractional width the content gets rescaled to fit,
+        // which visibly shimmers while trimming. Keep the layered subtree at an
+        // integer size so the texture always maps 1:1.
+        x: 0
+        y: 0
+        width: Math.floor(root.width)
+        height: Math.floor(root.height)
 
         layer.enabled: true
         layer.effect: RoundedCornersEffect {

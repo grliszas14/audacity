@@ -7,6 +7,8 @@
 #include <QPainter>
 #include <QSGFlatColorMaterial>
 #include <QTimer>
+
+#include <cstring>
 #include <QSGGeometry>
 #include <QSGVertexColorMaterial>
 
@@ -140,6 +142,13 @@ void WaveView::geometryChange(const QRectF& newGeometry, const QRectF& oldGeomet
 
     if (m_fallback) {
         m_fallback->setSize(newGeometry.size());
+    }
+
+    // A view laid out after its properties were set (or resized later) must
+    // re-prepare: a preparation that ran at zero height yields no vertices and
+    // would leave the view stuck on the fallback renderer.
+    if (newGeometry.size() != oldGeometry.size()) {
+        scheduleRepaint();
     }
 }
 
@@ -276,6 +285,7 @@ void WaveView::prepareSceneGraphData()
     QElapsedTimer timer;
     timer.start();
 
+    const std::vector<SGVertexData> prevVertices = std::move(m_sgVertices);
     m_sgVertices.clear();
     m_useSceneGraph = false;
 
@@ -317,10 +327,20 @@ void WaveView::prepareSceneGraphData()
     auto waveMetrics = wavepainterutils::getWaveMetrics(
         globalContext()->currentProject(), m_clipKey.key, params);
 
-    // The data cache is indexed from the untrimmed sequence start; shift the
-    // requested window by the left trim, as the bitmap renderer does.
-    waveMetrics.fromTime += waveClip->GetTrimLeft();
-    waveMetrics.toTime += waveClip->GetTrimLeft();
+    // The data cache is indexed from the untrimmed sequence start; place the
+    // requested window relative to the sequence origin. The origin
+    // (playStart - trimLeft) is invariant under trimming, so the window stays
+    // consistent with the container position from m_clipTime even when a
+    // repaint runs between the clip trim and the view-state update.
+    const double sequenceStartTime = waveClip->GetPlayStartTime() - waveClip->GetTrimLeft();
+    waveMetrics.fromTime = m_clipTime.itemStartTime - sequenceStartTime;
+    waveMetrics.toTime = waveMetrics.fromTime + (m_clipTime.itemEndTime - m_clipTime.itemStartTime);
+
+    // The clip container is positioned at integer x (see TrackClipsListModel);
+    // start the content at the sub-pixel residual so the waveform stays
+    // anchored to the timeline rather than to the rounded container.
+    const double containerExactX = m_context->timeToPosition(m_clipTime.itemStartTime);
+    waveMetrics.left = containerExactX - std::floor(0.5 + containerExactX);
 
     const float zoomMin = params.displayBounds.first;
     const float zoomMax = params.displayBounds.second;
@@ -429,8 +449,13 @@ void WaveView::prepareSceneGraphData()
 
     // Incomplete cache elements are recomputed by the cache on the next lookup;
     // ask again shortly so the snapshot does not stay partial until the next
-    // user-triggered repaint.
-    if (!allDataComplete && !m_sgRetryPending) {
+    // user-triggered repaint. Only retry while retries make progress, otherwise
+    // a clip whose data cannot complete would retry forever.
+    const bool madeProgress = m_sgVertices.size() != prevVertices.size()
+                              || (!m_sgVertices.empty()
+                                  && memcmp(m_sgVertices.data(), prevVertices.data(),
+                                            m_sgVertices.size() * sizeof(SGVertexData)) != 0);
+    if (!allDataComplete && madeProgress && !m_sgRetryPending) {
         m_sgRetryPending = true;
         QTimer::singleShot(80, this, [this]() {
             m_sgRetryPending = false;
