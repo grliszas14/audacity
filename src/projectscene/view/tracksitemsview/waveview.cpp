@@ -114,6 +114,14 @@ WaveView::~WaveView()
 
 void WaveView::scheduleRepaint()
 {
+    //! NOTE: polish() coalesces all repaint requests of a frame (clip time,
+    //! geometry, zoom, selection...) into a single updatePolish() call right
+    //! before the scene graph is synced.
+    polish();
+}
+
+void WaveView::updatePolish()
+{
     prepareSceneGraphData();
 
     if (m_useSceneGraph) {
@@ -262,8 +270,6 @@ void WaveView::paintFallback(QPainter* painter)
 {
     QElapsedTimer timer;
     timer.start();
-
-    m_updatePending = false;
 
     IWavePainter::Params params = getWavePainterParams();
     IWavePainter::PlotType pType = wavepainterutils::getPlotType(globalContext()->currentProject(), m_clipKey.key, params.zoom);
@@ -688,10 +694,6 @@ void WaveView::setTimelineContext(TimelineContext* newContext)
 
 void WaveView::updateView()
 {
-    if (m_updatePending) {
-        return;
-    }
-    m_updatePending = true;
     scheduleRepaint();
 }
 
