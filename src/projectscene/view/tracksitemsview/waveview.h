@@ -3,7 +3,9 @@
 */
 #pragma once
 
+#include <QQuickItem>
 #include <QQuickPaintedItem>
+#include <QSGGeometryNode>
 
 #include "modularity/ioc.h"
 #include "context/iglobalcontext.h"
@@ -16,7 +18,7 @@
 
 class WaveClipItem;
 namespace au::projectscene {
-class WaveView : public QQuickPaintedItem, public muse::async::Asyncable, public muse::Contextable
+class WaveView : public QQuickItem, public muse::async::Asyncable, public muse::Contextable
 {
     Q_OBJECT
     Q_PROPERTY(TimelineContext * context READ timelineContext WRITE setTimelineContext NOTIFY timelineContextChanged FINAL)
@@ -95,7 +97,12 @@ public:
     Q_INVOKABLE void smoothLastClickPos(unsigned int x, const unsigned int y);
     Q_INVOKABLE void setIsolatedPoint(unsigned int x, unsigned int y);
 
-    void paint(QPainter* painter) override;
+    //! Called from QML instead of update() to repaint the waveform
+    Q_INVOKABLE void forceRepaint();
+
+    void paintFallback(QPainter* painter);
+
+    QSGNode* updatePaintNode(QSGNode* oldNode, UpdatePaintNodeData*) override;
 
 signals:
     void timelineContextChanged();
@@ -114,7 +121,11 @@ signals:
 private:
 
     void updateView();
+    void scheduleRepaint();
+    void prepareSceneGraphData();
     void onWaveZoomChanged();
+    void geometryChange(const QRectF& newGeometry, const QRectF& oldGeometry) override;
+
     IWavePainter::Params getWavePainterParams() const;
     void applyColorfulStyle(IWavePainter::Params& params, const QColor& clipColor, const QColor& clipSelectedColor, bool selected) const;
     void applyClassicStyle(IWavePainter::Params& params, bool selected) const;
@@ -143,5 +154,36 @@ private:
 
     std::optional<int> m_currentChannel;
     std::optional<QPoint> m_lastClickedPoint;
+
+    //! Fallback QPainter-based rendering child (used for ConnectingDots/Samples modes)
+    class PaintedFallback;
+    PaintedFallback* m_fallback = nullptr;
+
+    //! Scene graph rendering state
+    bool m_useSceneGraph = false;
+    bool m_sgDirty = true;
+
+    struct SGVertexData
+    {
+        float x;
+        float maxY;
+        float minY;
+        float rmsMaxY;
+        float rmsMinY;
+        uint8_t r, g, b, a;
+        uint8_t rmsR, rmsG, rmsB, rmsA;
+    };
+    std::vector<SGVertexData> m_sgVertices;
+    size_t m_sgChannelSplitIndex = 0;
+    std::vector<float> m_sgZeroLineYs;
+    bool m_sgRetryPending = false;
+    float m_sgHeight = 0.0f;
+    bool m_sgShowRMS = false;
+    bool m_sgHasSelection = false;
+    float m_sgSelectionLeft = 0.0f;
+    float m_sgSelectionRight = 0.0f;
+    QColor m_sgBackgroundColor;
+    QColor m_sgSelectedBackgroundColor;
+    QColor m_sgZeroLineColor;
 };
 }

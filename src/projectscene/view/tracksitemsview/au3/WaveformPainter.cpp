@@ -1,7 +1,10 @@
 #include <QImage>
+#include <cmath>
 
 #include "WaveformPainter.h"
 #include "au3-screen-geometry/ZoomInfo.h"
+#include "au3-mixer/Envelope.h"
+#include "au3-utility/MemoryX.h"
 
 namespace au::projectscene {
 struct WaveBitmapCacheElementQt final : public WaveBitmapCacheElement
@@ -119,6 +122,145 @@ void WaveformPainter::Draw(size_t channelIndex,
 
         left += width;
     }
+}
+
+std::vector<WaveColumnVertex> WaveformPainter::GetColumnData(
+    size_t channelIndex,
+    const WavePaintParameters& params,
+    const au::projectscene::WaveMetrics& metrics,
+    bool* dataComplete)
+{
+    std::vector<WaveColumnVertex> result;
+
+    if (dataComplete) {
+        *dataComplete = true;
+    }
+
+    if (channelIndex >= mChannelCaches.size() || metrics.height <= 0) {
+        return result;
+    }
+
+    auto& dataCache = mChannelCaches[channelIndex].DataCache;
+    dataCache->UpdateViewportWidth(static_cast<int64_t>(metrics.width));
+
+    const ZoomInfo zoomInfo(0.0, metrics.zoom);
+    auto range = dataCache->PerformLookup(zoomInfo, metrics.fromTime, metrics.toTime);
+
+    const auto height = static_cast<float>(metrics.height);
+    const auto displayMin = static_cast<float>(params.Min);
+    const auto displayMax = static_cast<float>(params.Max);
+    const bool dbScale = params.DBScale;
+    const float dbRange = static_cast<float>(params.DBRange);
+    const bool showClipping = params.ShowClipping;
+
+    auto valueToY = [displayMin, displayMax, height](float value) -> float {
+        if (displayMax == displayMin) {
+            return height * 0.5f;
+        }
+        float normalized = (displayMax - value) / (displayMax - displayMin);
+        return normalized * (height - 1);
+    };
+
+    auto applyDB = [dbRange](float value) -> float {
+        float sign = (value >= 0 ? 1.0f : -1.0f);
+        if (value != 0.0f) {
+            float db = static_cast<float>(LINEAR_TO_DB(fabs(value)));
+            value = (db + dbRange) / dbRange;
+            if (value < 0.0f) {
+                value = 0.0f;
+            }
+            value *= sign;
+        }
+        return value;
+    };
+
+    // Compute selection pixel range
+    const int64_t selFirst = zoomInfo.TimeToPosition(metrics.selectionStartTime);
+    const int64_t selLast = std::max(zoomInfo.TimeToPosition(metrics.selectionEndTime), selFirst + 1);
+
+    // Get envelope if present
+    const Envelope* envelope = params.AttachedEnvelope;
+    const bool hasEnvelope = envelope != nullptr
+                             && (envelope->GetNumberOfPoints() > 0
+                                 || envelope->GetDefaultValue() != 1.0);
+
+    if (dataComplete) {
+        *dataComplete = !(range.begin() == range.end() && metrics.width > 0);
+    }
+
+    constexpr size_t tileWidth = GraphicsDataCacheBase::CacheElementWidth;
+    float tileStartX = static_cast<float>(metrics.left);
+
+    for (auto it = range.begin(); it != range.end(); ++it) {
+        const auto& element = *it;
+        const size_t leftOffset = it.GetLeftOffset();
+        const size_t rightOffset = it.GetRightOffset();
+
+        //! NOTE: x always advances by the tile's nominal width, like the bitmap
+        //! renderer: an incomplete tile must leave a gap, not shift the rest.
+        const size_t nominalWidth = tileWidth - leftOffset - rightOffset;
+        const size_t endCol = std::min<size_t>(element.AvailableColumns, tileWidth - rightOffset);
+
+        if (dataComplete && !element.IsComplete) {
+            *dataComplete = false;
+        }
+
+        const size_t emitCount = endCol > leftOffset ? endCol - leftOffset : 0;
+
+        // Fetch envelope values for the emitted columns of this tile
+        std::array<double, tileWidth> envValues {};
+        if (hasEnvelope && emitCount > 0) {
+            double colTime = metrics.fromTime + (tileStartX - metrics.left) / metrics.zoom;
+            envelope->GetValues(
+                envValues.data(), static_cast<int>(emitCount),
+                colTime + envelope->GetOffset(),
+                1.0 / metrics.zoom);
+        }
+
+        for (size_t col = leftOffset; col < endCol; ++col) {
+            auto columnData = element.Data[col];
+            const float x = tileStartX + static_cast<float>(col - leftOffset);
+
+            // Apply envelope
+            if (hasEnvelope) {
+                float envVal = static_cast<float>(envValues[col - leftOffset]);
+                columnData.min *= envVal;
+                columnData.max *= envVal;
+                columnData.rms *= envVal;
+            }
+
+            // Apply dB scale
+            if (dbScale) {
+                columnData.min = applyDB(columnData.min);
+                columnData.max = applyDB(columnData.max);
+                columnData.rms = applyDB(columnData.rms);
+            }
+
+            // Determine selection state
+            double colTimeSec = metrics.fromTime + (x - metrics.left) / metrics.zoom;
+            int64_t pixelPos = static_cast<int64_t>(colTimeSec * metrics.zoom + 0.5);
+            bool selected = pixelPos >= selFirst && pixelPos < selLast;
+
+            bool clipping = showClipping
+                            && (columnData.min <= static_cast<float>(-MAX_AUDIO)
+                                || columnData.max >= static_cast<float>(MAX_AUDIO));
+
+            WaveColumnVertex v;
+            v.x = x;
+            v.maxY = valueToY(columnData.max);
+            v.minY = valueToY(columnData.min);
+            v.rmsMaxY = valueToY(std::min(columnData.rms, columnData.max));
+            v.rmsMinY = valueToY(std::max(-columnData.rms, columnData.min));
+            v.selected = selected;
+            v.clipping = clipping;
+
+            result.push_back(v);
+        }
+
+        tileStartX += static_cast<float>(nominalWidth);
+    }
+
+    return result;
 }
 
 void WaveformPainter::MarkChanged() noexcept

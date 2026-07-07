@@ -279,7 +279,7 @@ Rectangle {
 
     function mousePressAndHold(x, y) {
         root.altPressed ? waveView.smoothLastClickPos(x, y - header.height) : waveView.setLastClickPos(x, y - header.height, x, y - header.height)
-        waveView.update()
+        waveView.forceRepaint()
     }
 
     function mouseReleased() {
@@ -310,7 +310,7 @@ Rectangle {
     }
 
     function updateViews() {
-        waveView.update()
+        waveView.forceRepaint()
         if (spectrogramViewLoader.item) {
             spectrogramViewLoader.item.update()
         }
@@ -861,8 +861,6 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.fillHeight: true
 
-                fillColor: root.clipSelected ? root.clipSelectedColor : root.clipColor
-
                 channelHeightRatio: showChannelSplitter ? root.channelHeightRatio : 1
 
                 clipColor: root.clipColor
@@ -878,12 +876,12 @@ Rectangle {
                 function onWaveViewPositionChanged(x, y) {
                     if (waveView.isIsolationMode) {
                         waveView.setIsolatedPoint(x, y)
-                        waveView.update()
+                        waveView.forceRepaint()
                     } else if (root.multiSampleEdit && !root.altPressed) {
                         var lastX = root.lastSample.x
                         var lastY = root.lastSample.y
                         waveView.setLastClickPos(lastX, lastY, x, y)
-                        waveView.update()
+                        waveView.forceRepaint()
                     } else {
                         waveView.setLastMousePos(x, y)
                     }
