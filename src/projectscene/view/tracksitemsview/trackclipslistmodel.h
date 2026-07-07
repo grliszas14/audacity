@@ -92,5 +92,6 @@ private:
     bool m_isStereo = false;
 
     trackedit::ClipKeyList m_pendingToggleDeselect;
+    trackedit::ClipKeyList m_cachedIntersectingClips;
 };
 }
