@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QObject>
+#include <QPropertyAnimation>
 #include <QTimer>
 #include <QVariantAnimation>
 
@@ -64,6 +65,8 @@ class TimelineContext : public QObject, public muse::async::Asyncable, public mu
     Q_PROPERTY(double lastPlaybackSeekPosition READ lastPlaybackSeekPosition NOTIFY lastPlaybackSeekPositionChanged FINAL)
 
     Q_PROPERTY(double invalidGuidelineTime READ invalidGuidelineTime CONSTANT FINAL)
+    Q_PROPERTY(double smoothScrollFrameStart READ smoothScrollFrameStart WRITE setSmoothScrollFrameStart)
+    Q_PROPERTY(double smoothZoomLevel READ smoothZoomLevel WRITE setSmoothZoomLevel)
 
     muse::GlobalInject<IProjectSceneConfiguration> configuration;
 
@@ -249,6 +252,14 @@ private:
 
     void saveViewState() const;
 
+    double smoothScrollFrameStart() const;
+    void setSmoothScrollFrameStart(double time);
+    void startSmoothScroll(double targetFrameStart);
+
+    double smoothZoomLevel() const;
+    void setSmoothZoomLevel(double zoom);
+    void startSmoothZoom(double targetZoom, double mouseX);
+
     context::IPlaybackStatePtr playbackState() const;
 
     friend struct SnapTestAccess;
@@ -289,5 +300,11 @@ private:
     double m_autoScrollStep = 0.0;
 
     QVariantAnimation m_frameStartAnimation;
+    QPropertyAnimation* m_smoothScrollAnimation = nullptr;
+    double m_smoothScrollTarget = 0.0;
+
+    QPropertyAnimation* m_smoothZoomAnimation = nullptr;
+    double m_smoothZoomTarget = 0.0;
+    double m_smoothZoomMouseX = 0.0;
 };
 }

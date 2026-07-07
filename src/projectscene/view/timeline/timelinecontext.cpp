@@ -221,19 +221,33 @@ void TimelineContext::onWheel(double mouseX, const QPoint& pixelDelta, const QPo
     if (modifiers.testFlag(Qt::ControlModifier)) {
         double zoomSpeed = qPow(2.0, 1.0 / configuration()->mouseZoomPrecision());
         qreal absSteps = sqrt(stepsX * stepsX + stepsY * stepsY) * (stepsY > -stepsX ? 1 : -1);
-        double newZoom = clampedZoom(zoom() * qPow(zoomSpeed, absSteps));
 
-        setZoom(newZoom, mouseX);
+        double baseZoom
+            =m_smoothZoomAnimation && m_smoothZoomAnimation->state() == QAbstractAnimation::Running
+              ? m_smoothZoomTarget : m_zoom;
+        double newZoom = clampedZoom(baseZoom * qPow(zoomSpeed, absSteps));
+
+        startSmoothZoom(newZoom, mouseX);
     } else {
         qreal correction = 1.0 / zoom();
 
         if (modifiers.testFlag(Qt::ShiftModifier)) {
             qreal abs = sqrt(dx * dx + dy * dy) * (dy > -dx ? -1 : 1);
-            shiftFrameTime(abs * correction);
+            double scrollAmount = abs * correction;
+
+            double baseTime
+                =m_smoothScrollAnimation && m_smoothScrollAnimation->state() == QAbstractAnimation::Running
+                  ? m_smoothScrollTarget : m_frameStartTime;
+            startSmoothScroll(baseTime + scrollAmount);
             emit userHorizontalScrolled();
         } else {
             if (!qFuzzyIsNull(dx)) {
-                shiftFrameTime(-dx * correction);
+                double scrollAmount = -dx * correction;
+
+                double baseTime
+                    =m_smoothScrollAnimation && m_smoothScrollAnimation->state() == QAbstractAnimation::Running
+                      ? m_smoothScrollTarget : m_frameStartTime;
+                startSmoothScroll(baseTime + scrollAmount);
                 emit userHorizontalScrolled();
             }
             if (!qFuzzyIsNull(dy)) {
@@ -508,6 +522,57 @@ IProjectViewStatePtr TimelineContext::viewState() const
 {
     project::IAudacityProjectPtr prj = globalContext()->currentProject();
     return prj ? prj->viewState() : nullptr;
+}
+
+double TimelineContext::smoothScrollFrameStart() const
+{
+    return m_frameStartTime;
+}
+
+void TimelineContext::setSmoothScrollFrameStart(double time)
+{
+    moveToFrameTime(time);
+}
+
+void TimelineContext::startSmoothScroll(double targetFrameStart)
+{
+    if (!m_smoothScrollAnimation) {
+        m_smoothScrollAnimation = new QPropertyAnimation(this, "smoothScrollFrameStart", this);
+        m_smoothScrollAnimation->setDuration(150);
+        m_smoothScrollAnimation->setEasingCurve(QEasingCurve::OutCubic);
+    }
+
+    m_smoothScrollAnimation->stop();
+    m_smoothScrollAnimation->setStartValue(m_frameStartTime);
+    m_smoothScrollAnimation->setEndValue(targetFrameStart);
+    m_smoothScrollTarget = targetFrameStart;
+    m_smoothScrollAnimation->start();
+}
+
+double TimelineContext::smoothZoomLevel() const
+{
+    return m_zoom;
+}
+
+void TimelineContext::setSmoothZoomLevel(double zoom)
+{
+    setZoom(zoom, m_smoothZoomMouseX);
+}
+
+void TimelineContext::startSmoothZoom(double targetZoom, double mouseX)
+{
+    if (!m_smoothZoomAnimation) {
+        m_smoothZoomAnimation = new QPropertyAnimation(this, "smoothZoomLevel", this);
+        m_smoothZoomAnimation->setDuration(150);
+        m_smoothZoomAnimation->setEasingCurve(QEasingCurve::OutCubic);
+    }
+
+    m_smoothZoomMouseX = mouseX;
+    m_smoothZoomAnimation->stop();
+    m_smoothZoomAnimation->setStartValue(m_zoom);
+    m_smoothZoomAnimation->setEndValue(targetZoom);
+    m_smoothZoomTarget = targetZoom;
+    m_smoothZoomAnimation->start();
 }
 
 void TimelineContext::onProjectChanged()
